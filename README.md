@@ -1,7 +1,7 @@
 # cobalt
 best way to save what you love: [cobalt.tools](https://cobalt.tools/) 
 
-This version fixed youtube video that are [non-seekable](https://github.com/wukko/cobalt/issues/255). Instead of streaming the ffmpeg file to client, this version generated the video locally first in temporary (`/temp`) folder (which would be removed later), then send the video to client when finished.
+This version fixed youtube video that are [non-seekable](https://github.com/wukko/cobalt/issues/255). Instead of streaming the ffmpeg file to client, this version generated the video locally first in temporary (`/tmp`) folder (which would be removed later), then send the video to client when finished.
 
 > But be aware that, while this fixed the issue, it also comes with another issue. To self host this in server, you need to know that the video would be generated on your server which would take some space on your server.
 

@@ -1,14 +1,17 @@
-import { streamAudioOnly, streamDefault, streamLiveRender, streamVideoOnly } from "./types.js";
+import { poolStream, streamAudioOnly, streamDefault, streamLiveRender, streamVideoOnly } from "./types.js";
 
-export default async function(res, streamInfo) {
+export default async function(res, streamInfo, req = null) {
     try {
         if (streamInfo.isAudioOnly && streamInfo.type !== "bridge") {
             streamAudioOnly(streamInfo, res);
             return;
         }
         switch (streamInfo.type) {
+            case "pool":
+                await poolStream(streamInfo, res, req);
+                break;
             case "render":
-                await streamLiveRender(streamInfo, res);
+                await streamLiveRender(streamInfo, res, req);
                 break;
             case "videoM3U8":
             case "mute":

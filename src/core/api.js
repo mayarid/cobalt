@@ -12,6 +12,7 @@ import stream from "../modules/stream/stream.js";
 import loc from "../localization/manager.js";
 import { sha256 } from "../modules/sub/crypto.js";
 import { verifyStream } from "../modules/stream/manage.js";
+import { downloadVideo } from "../modules/stream/types.js";
 
 export function runAPI(express, app, gitCommit, gitBranch, __dirname) {
     const corsConfig = process.env.cors === '0' ? {
@@ -51,7 +52,9 @@ export function runAPI(express, app, gitCommit, gitBranch, __dirname) {
 
     app.use('/api/:type', cors(corsConfig));
     app.use('/api/json', apiLimiter);
+    app.use('/api/pool', apiLimiter);
     app.use('/api/stream', apiLimiterStream);
+    app.use('/api/download', apiLimiterStream);
     app.use('/api/onDemand', apiLimiter);
 
     app.use((req, res, next) => {
@@ -112,9 +115,26 @@ export function runAPI(express, app, gitCommit, gitBranch, __dirname) {
         }
     });
 
+    app.get('/api/download', async (req, res) => {
+        const url = req.query.url;
+        const filename = req.query.filename;
+
+        try {
+            if (url && filename) {
+                return downloadVideo({ url, filename }, res);
+            }
+        } catch (e) {
+            res.status(500).json({ status: "error", text: "Internal Server Error" });
+        }
+    });
+
     app.get('/api/:type', (req, res) => {
         try {
             switch (req.params.type) {
+                case 'pool': 
+                    if (req.query.bid && req.query.filename) {
+                        return stream(res, { type: 'pool', bid: req.query.bid, filename: req.query.filename }, req);
+                    }
                 case 'stream':
                     if (req.query.t && req.query.h && req.query.e && req.query.t.toString().length === 21
                     && req.query.h.toString().length === 64 && req.query.e.toString().length === 13) {
@@ -127,7 +147,7 @@ export function runAPI(express, app, gitCommit, gitBranch, __dirname) {
                                 status: "continue"
                             });
                         }
-                        return stream(res, streamInfo);
+                        return stream(res, streamInfo, req);
                     } else {
                         let j = apiJSON(0, {
                             t: "stream token, hmac, or expiry timestamp is missing"

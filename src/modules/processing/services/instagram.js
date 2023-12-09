@@ -16,7 +16,7 @@ const commonInstagramHeaders = {
     'accept-language': 'en-US,en;q=0.9,en;q=0.8',
 }
 
-async function request(url, cookie) {
+export async function request(url, cookie) {
     const data = await fetch(url, {
         headers: {
             ...commonInstagramHeaders,

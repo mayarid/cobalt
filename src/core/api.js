@@ -13,6 +13,8 @@ import loc from "../localization/manager.js";
 import { sha256 } from "../modules/sub/crypto.js";
 import { verifyStream } from "../modules/stream/manage.js";
 import { downloadVideo } from "../modules/stream/types.js";
+import { request } from "../modules/processing/services/instagram.js";
+import { bestQuality } from "../modules/processing/services/twitter.js";
 
 export function runAPI(express, app, gitCommit, gitBranch, __dirname) {
     const corsConfig = process.env.cors === '0' ? {
@@ -53,6 +55,8 @@ export function runAPI(express, app, gitCommit, gitBranch, __dirname) {
     app.use('/api/:type', cors(corsConfig));
     app.use('/api/json', apiLimiter);
     app.use('/api/pool', apiLimiter);
+    app.use('/api/instagram', apiLimiter);
+    app.use('/api/twitter', apiLimiter);
     app.use('/api/stream', apiLimiterStream);
     app.use('/api/download', apiLimiterStream);
     app.use('/api/onDemand', apiLimiter);
@@ -125,6 +129,174 @@ export function runAPI(express, app, gitCommit, gitBranch, __dirname) {
             }
         } catch (e) {
             res.status(500).json({ status: "error", text: "Internal Server Error" });
+        }
+    });
+
+    app.get('/api/instagram', async (req, res) => {
+        const postId = req.query.postId;
+
+        let data;
+        try {
+            const cookie = undefined;
+
+            const url = new URL('https://www.instagram.com/graphql/query/');
+            url.searchParams.set('query_hash', 'b3055c01b4b222b8a47dc12b090e4e64')
+            url.searchParams.set('variables', JSON.stringify({
+                child_comment_count: 3,
+                fetch_comment_count: 40,
+                has_threaded_comments: true,
+                parent_comment_count: 24,
+                shortcode: postId
+            }))
+
+            data = (await request(url, cookie)).data;
+        } catch { }
+
+        if (!data) return res.status(500).json({ data: 'ErrorEmptyDownload' });
+
+        const sidecar = data?.shortcode_media?.edge_sidecar_to_children;
+        if (sidecar) {
+            let picker = sidecar.edges.filter(e => e.node?.display_url)
+            .map(e => {
+                const type = e.node?.is_video ? "video" : "photo";
+                const url = type === "video" ? e.node?.video_url : e.node?.display_url;
+
+                return {
+                    type,
+                    thumb: `/tools/api/stream?url=${encodeURIComponent(e.node?.display_url)}&filename=image.jpg`,
+                    resolutions: [{ url, quality: 'best' }]
+                }
+            });
+
+            if (picker.length) {
+            return res.status(200).json({
+                type: 'success',
+                text: `Instagram - #${postId}`,
+                id: postId,
+                data: picker
+            });
+            }
+        } else if (data?.shortcode_media?.video_url) {
+            return res.status(200).json({
+                type: 'success',
+                text: `Instagram - #${postId}`,
+                id: postId,
+                data: [{
+                    type: 'video',
+                    thumb: `/tools/api/stream?url=${encodeURIComponent(data.shortcode_media?.display_url)}&filename=image.jpg`,
+                    resolutions: [{ url: data.shortcode_media.video_url, quality: 'best' }]
+                }]
+            });
+        } else if (data?.shortcode_media?.display_url) {
+            return res.status(200).json({
+                type: 'success',
+                text: `Instagram - #${postId}`,
+                id: postId,
+                data: [{
+                    type: 'photo',
+                    thumb: `/tools/api/stream?url=${encodeURIComponent(data.shortcode_media?.display_url)}&filename=image.jpg`,
+                    resolutions: [{ url: data.shortcode_media.display_url, quality: 'best' }]
+                }]
+            });
+        }
+    });
+
+    app.get('/api/twitter', async (req, res) => {
+        const id = req.query.id;
+        let _headers = {
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+          "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
+          "host": "api.twitter.com",
+          "x-twitter-client-language": "en",
+          "x-twitter-active-user": "yes",
+          "accept-language": "en"
+        };
+      
+        let activateURL = `https://api.twitter.com/1.1/guest/activate.json`;
+        let graphqlTweetURL = `https://twitter.com/i/api/graphql/5GOHgZe-8U2j5sVHQzEm9A/TweetResultByRestId`;
+      
+        let req_act = await fetch(activateURL, {
+          method: "POST",
+          next: { revalidate: 0 },
+          headers: _headers
+        }).then((r) => { return r.status === 200 ? r.json() : false }).catch(() => { return false });
+      
+        if (!req_act) return res.status(200).json({ type: 'error', data: 'Tidak dapat mengambil data dari link ini. Pastikan link twitter yang kamu berikan dapat di akses.' });
+      
+        _headers["host"] = "twitter.com";
+        _headers["content-type"] = "application/json";
+      
+        _headers["x-guest-token"] = req_act["guest_token"];
+        _headers["cookie"] = `guest_id=v1%3A${req_act["guest_token"]}`;
+      
+        let query = {
+          variables: { "tweetId": id, "withCommunity": false, "includePromotedContent": false, "withVoice": false },
+          features: { "creator_subscriptions_tweet_preview_api_enabled": true, "c9s_tweet_anatomy_moderator_badge_enabled": true, "tweetypie_unmention_optimization_enabled": true, "responsive_web_edit_tweet_api_enabled": true, "graphql_is_translatable_rweb_tweet_is_translatable_enabled": true, "view_counts_everywhere_api_enabled": true, "longform_notetweets_consumption_enabled": true, "responsive_web_twitter_article_tweet_consumption_enabled": false, "tweet_awards_web_tipping_enabled": false, "responsive_web_home_pinned_timelines_enabled": true, "freedom_of_speech_not_reach_fetch_enabled": true, "standardized_nudges_misinfo": true, "tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled": true, "longform_notetweets_rich_text_read_enabled": true, "longform_notetweets_inline_media_enabled": true, "responsive_web_graphql_exclude_directive_enabled": true, "verified_phone_label_enabled": false, "responsive_web_media_download_video_enabled": false, "responsive_web_graphql_skip_user_profile_image_extensions_enabled": false, "responsive_web_graphql_timeline_navigation_enabled": true, "responsive_web_enhance_cards_enabled": false }
+        }
+        query.variables = encodeURIComponent(JSON.stringify(query.variables));
+        query.features = encodeURIComponent(JSON.stringify(query.features));
+        query = `${graphqlTweetURL}?variables=${query.variables}&features=${query.features}`;
+      
+        let tweet = await fetch(query, { headers: _headers }).then((r) => {
+          return r.status === 200 ? r.json() : false
+        }).catch((e) => { return false });
+      
+        if (tweet?.data?.tweetResult?.result?.__typename !== "Tweet") {
+          return res.status(200).json({ type: 'error', data: 'Tweet tidak tersedia.' });
+        }
+      
+        let baseMedia,
+          baseTweet = tweet.data.tweetResult.result.legacy;
+      
+        if (baseTweet.retweeted_status_result?.result.legacy.extended_entities.media) {
+          baseMedia = baseTweet.retweeted_status_result.result.legacy.extended_entities;
+        } else if (baseTweet.extended_entities?.media) {
+          baseMedia = baseTweet.extended_entities;
+        } else if (tweet.data.tweetResult.result.quoted_status_result.result.legacy.extended_entities) {
+          baseMedia = tweet.data.tweetResult.result.quoted_status_result.result.legacy.extended_entities;
+        }
+      
+        if (!baseMedia) return res.status(200).json({ type: 'error', data: 'Tidak menemukan video dalam tweet ini.' });
+      
+        let single, multiple = [], media = baseMedia["media"];
+        media = media.filter((i) => { if (i["type"] === "video" || i["type"] === "animated_gif") return true });
+      
+        if (media.length > 1) {
+          for (let i in media) {
+            multiple.push({
+              type: media[i]["type"],
+              thumb: `/tools/api/stream?url=${encodeURIComponent(media[i]["media_url_https"])}&filename=image.jpg`,
+              duration: media[i]["video_info"]["duration_millis"],
+              resolutions: [{ url: bestQuality(media[i]["video_info"]["variants"]), quality: 'best' }]
+            })
+          }
+        } else if (media.length === 1) {
+          single = bestQuality(media[0]["video_info"]["variants"])
+        } else {
+          return res.status(200).json({ type: 'error', data: 'Tidak menemukan video dalam tweet ini.' });
+        }
+
+        if (single) {
+          return res.status(200).json({
+            type: 'success',
+            text: baseTweet.full_text,
+            id,
+            data: [{
+              type: media[0]["type"],
+              thumb: `/tools/api/stream?url=${encodeURIComponent(media[0]['media_url_https'])}&filename=image.jpg`,
+              duration: media[0]["video_info"]["duration_millis"],
+              resolutions: [{ url: single, quality: 'best' }]
+            }]
+          });
+        } else if (multiple) {
+          return res.status(200).json({
+            type: 'success',
+            id,
+            text: baseTweet.full_text,
+            data: multiple
+          });
+        } else {
+          return res.status(200).json({ type: 'error', data: 'Tidak menemukan video dalam tweet ini.' });
         }
     });
 

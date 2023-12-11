@@ -164,6 +164,10 @@ export async function poolStream(streamInfo, res, req) {
       
             res.setHeader('Content-Disposition', contentDisposition(streamInfo.filename));
             res.setHeader('Content-Type', 'video/mp4');
+
+            rStream.on('data', () => {
+              console.log('data is send.')
+            });
       
             rStream.on('end', () => {
               console.log('read stream end, no more data');
@@ -212,7 +216,6 @@ export async function streamLiveRender(streamInfo, res, req) {
     if (streamInfo.urls.length !== 2) return shutdown();
     let format = streamInfo.filename.split('.')[streamInfo.filename.split('.').length - 1],
       args = [
-        '-loglevel', '-8',
         '-threads', `${getThreads()}`,
         '-i', streamInfo.urls[0],
         '-i', streamInfo.urls[1],
@@ -283,6 +286,10 @@ export async function streamLiveRender(streamInfo, res, req) {
           rStream.destroy();
           closeResponse(res);
         })
+
+        rStream.on('data', () => {
+          console.log('data is send.')
+        });
   
         res.setHeader('Content-Disposition', contentDisposition(streamInfo.filename));
         res.setHeader('Content-Type', 'video/mp4');
@@ -316,7 +323,6 @@ export function streamAudioOnly(streamInfo, res) {
 
   try {
     let args = [
-      '-loglevel', '-8',
       '-threads', `${getThreads()}`,
       '-i', streamInfo.urls
     ]
@@ -364,7 +370,6 @@ export function streamVideoOnly(streamInfo, res) {
 
   try {
     let args = [
-      '-loglevel', '-8',
       '-threads', `${getThreads()}`,
       '-i', streamInfo.urls,
       '-c', 'copy'

@@ -15,6 +15,7 @@ import { verifyStream } from "../modules/stream/manage.js";
 import { downloadVideo } from "../modules/stream/types.js";
 import { request } from "../modules/processing/services/instagram.js";
 import { bestQuality } from "../modules/processing/services/twitter.js";
+import { getCookie } from "../modules/processing/cookie/manager.js";
 
 export function runAPI(express, app, gitCommit, gitBranch, __dirname) {
     const corsConfig = process.env.cors === '0' ? {
@@ -137,7 +138,7 @@ export function runAPI(express, app, gitCommit, gitBranch, __dirname) {
 
         let data;
         try {
-            const cookie = undefined;
+            const cookie = getCookie('instagram');
 
             const url = new URL('https://www.instagram.com/graphql/query/');
             url.searchParams.set('query_hash', 'b3055c01b4b222b8a47dc12b090e4e64')
@@ -150,7 +151,9 @@ export function runAPI(express, app, gitCommit, gitBranch, __dirname) {
             }))
 
             data = (await request(url, cookie)).data;
-        } catch { }
+        } catch (e) {
+            console.log(e)
+         }
 
         if (!data) return res.status(500).json({ data: 'ErrorEmptyDownload' });
 
